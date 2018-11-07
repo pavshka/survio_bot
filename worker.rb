@@ -1,8 +1,9 @@
 require 'capybara'
+require_relative 'chrome_headless'
 
 class Worker
   def initialize
-    @session = Capybara::Session.new(:selenium_chrome).tap do |session|
+    @session = Capybara::Session.new(:selenium_chrome_headless).tap do |session|
       session.visit 'http://surviv.io/'
       puts 'Running capybara worker'
     end
@@ -17,13 +18,13 @@ class Worker
 
   def wait_for_other_players
     puts 'Waiting for other players'
-    wait_time = 60
+    time_to_wait = 60
 
-    while wait_time > 0
+    while time_to_wait > 0
       sleep 2
-      wait_time -= 2
+      time_to_wait -= 2
       unless @session.find('#team-menu-member-list .team-menu-member:nth-child(2) .name').text.empty?
-        wait_time 0
+        time_to_wait = 0
       end
     end
 
