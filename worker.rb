@@ -1,51 +1,69 @@
-require 'capybara'
-# require_relative 'chrome_headless'
+require 'websocket-client-simple'
+require 'pry'
+require 'faye/websocket'
+require 'eventmachine'
+require 'json'
 
 class Worker
-  def initialize
-    @session = Capybara::Session.new(:selenium_chrome)
-    @session.visit 'http://surviv.io/'
+  def initialize(bot, message)
+    # TODO: refactor worker. Shouldn't know anything about bot and message
+    @bot = bot
+    @tlg_message = message
+    @lobby_sent = false
+    open_connection
   end
 
-  def create_lobby
-    create_team
-    fill_none
-    extract_team_url
-  end
+  def open_connection
+    puts 'Initializing worker'
 
-  def wait_for_other_players
-    time_to_wait = 60
-    delay = 2
+    # TODO: figure out how event machine works
+    EM.run do
+      ws = Faye::WebSocket::Client.new('ws://surviv.io/team')
 
-    (time_to_wait / delay).times do
-      return true if other_player_joined?
+      ws.on :open do |_|
+        puts 'Opened connection. Creating lobby...'
+        ws.send create_lobby
+      end
 
-      sleep delay
+      ws.on :message do |event|
+        puts 'Recieved new message:'
+        puts event.data
+        @new_event_data = JSON.parse(event.data)
+
+        send_lobby unless lobby_sent?
+        ws.close if player_joined?
+      end
+
+      ws.on :close do |event|
+        puts 'Closing connection'
+        puts [event.code, event.reason]
+        EM.stop
+      end
     end
-
-    false
   end
 
-  def leave_lobby
-    @session.find('#btn-team-leave').click
+  def create_lobby(region = 'eu', team = 4, fill = false)
+    {
+      type: 'create',
+      data: {
+        roomData: { region: region, teamMode: team, autoFill: fill },
+        playerData: { name: 'survioBot' }
+      }
+    }.to_json
   end
 
-  private
-
-  def create_team
-    @session.find('#btn-create-team').click
+  def lobby_sent?
+    @lobby_sent
   end
 
-  def fill_none
-    @session.find('#btn-team-fill-none').click
+  def send_lobby
+    room_url = @new_event_data['data']['room']['roomUrl']
+    link = "http://surviv.io/#{room_url}"
+    @bot.api.send_message(chat_id: @tlg_message.chat.id, text: link)
+    @lobby_sent = true
   end
 
-  def extract_team_url
-    @session.find('#team-url').text
-  end
-
-  def other_player_joined?
-    other_player = @session.find('#team-menu-member-list .team-menu-member:nth-child(2) .name').text
-    !other_player.empty?
+  def player_joined?
+    @new_event_data['data']['players'].count > 1
   end
 end
