@@ -27,10 +27,14 @@ class Worker
       ws.on :message do |event|
         puts 'Recieved new message:'
         puts event.data
-        @new_event_data = JSON.parse(event.data)
 
-        send_lobby unless lobby_sent?
-        ws.close if player_joined?
+        data = JSON.parse(event.data)
+        unless keep_alive?(data)
+          @new_event_data = data
+
+          send_lobby unless lobby_sent?
+          ws.close if player_joined?
+        end
       end
 
       ws.on :close do |event|
@@ -49,6 +53,10 @@ class Worker
         playerData: { name: 'survioBot' }
       }
     }.to_json
+  end
+
+  def keep_alive?(data)
+    data['type'] == 'keepAlive'
   end
 
   def lobby_sent?
