@@ -2,13 +2,14 @@ require_relative 'lobby'
 
 module Commands
   class Arduino
-    def call
-      # it does nothing for now
+    def initialize(recipient)
+      @recipient = recipient
+    end
+    attr_reader :recipient
 
-      # def pretend_arduino(message)
-      #   bot.api.send_message(chat_id: message.chat.id, text: 'Pretending to be an Arduino *click*')
-      #   create_lobby(message)
-      # end
+    def call
+      recipient.send_message('Pretend being an Arduino *click*')
+      Lobby.new(recipient).call
     end
   end
 end

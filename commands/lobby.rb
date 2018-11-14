@@ -1,34 +1,38 @@
 require 'faye/websocket'
 require 'eventmachine'
 require 'json'
+require_relative '../lib/logging'
 
 module Commands
   class Lobby
-    def initialize(bot, message)
-      # TODO: refactor command. Shouldn't know anything about bot and message
-      @bot = bot
-      @tlg_message = message
+    BASE_URL = 'http://surviv.io/'.freeze
+    WEB_SOCKET_URL = 'ws://surviv.io/team'.freeze
+    include Logging
+
+    def initialize(recipient)
+      @recipient = recipient
       @lobby_sent = false
     end
+    attr_reader :recipient, :lobby_sent
 
     def call
-      puts 'Initializing worker'
+      logger.info 'Executing /lobby command'
 
       # TODO: figure out how event machine works
       EM.run do
-        ws = Faye::WebSocket::Client.new('ws://surviv.io/team')
+        ws = Faye::WebSocket::Client.new(WEB_SOCKET_URL)
 
         ws.on :open do |_|
-          puts 'Opened connection. Creating lobby...'
+          logger.info 'Opened connection. Creating lobby...'
           ws.send create_lobby
         end
 
         ws.on :message do |event|
-          puts 'Recieved new message:'
-          puts event.data
+          logger.info 'Recieved new message:'
+          logger.info event.data
 
           data = JSON.parse(event.data)
-          unless keep_alive?(data)
+          if state_event?(data)
             @new_event_data = data
 
             send_lobby unless lobby_sent?
@@ -42,6 +46,8 @@ module Commands
           EM.stop
         end
       end
+    rescue StandardError => e
+      logger.error e
     end
 
     def create_lobby(region = 'eu', team = 4, fill = false)
@@ -54,8 +60,8 @@ module Commands
       }.to_json
     end
 
-    def keep_alive?(data)
-      data['type'] == 'keepAlive'
+    def state_event?(data)
+      data['type'] == 'state'
     end
 
     def lobby_sent?
@@ -64,8 +70,8 @@ module Commands
 
     def send_lobby
       room_url = @new_event_data['data']['room']['roomUrl']
-      link = "http://surviv.io/#{room_url}"
-      @bot.api.send_message(chat_id: @tlg_message.chat.id, text: link)
+      url = BASE_URL + room_url
+      recipient.send_message(url)
       @lobby_sent = true
     end
 

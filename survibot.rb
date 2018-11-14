@@ -1,50 +1,36 @@
 require 'telegram/bot'
 require_relative 'commands/lobby'
 require_relative 'commands/arduino'
+require_relative 'lib/logging'
+require_relative 'lib/recipient'
 
 class SurviBot
-  def initialize
-    @token = ENV['BOT_TOKEN']
-    @log = Logger.new(STDOUT)
-  end
-  attr_reader :token, :log, :bot
+  MAX_RETIRES = 5
+  include Logging
 
-  def self.call
-    new.call
+  def initialize
+    logger.info 'Starting bot'
+    @token = ENV['BOT_TOKEN']
   end
 
   def call
-    log.info 'Starting bot'
-
-    Telegram::Bot::Client.run(token) do |bot|
-      @bot = bot
-
-      begin
-        retries ||= 0
-        listen_to_commands
-      rescue Telegram::Bot::Exceptions::ResponseError => e
-        process_error(e)
-        sleep(retries += 1)
-        retry if retries < 5
-      end
+    Telegram::Bot::Client.run(@token) do |bot|
+      bot.listen { |message| process_message(message, bot) }
     end
+  rescue StandardError => e
+    retry if handle_error(e)
   end
 
-  def listen_to_commands
-    bot.listen do |message|
-      begin
-        case extract_command(message)
-        when '/lobby'
-          Thread.new { Commands::Lobby.new(bot, message).call }
-        when '/arduino'
-          Thread.new { Commands::Arduino.new.call }
-        else
-          log.warn("Received unsupported message: #{message.text}")
-        end
-      rescue => e
-        process_error(e)
-        next
-      end
+  def process_message(message, bot)
+    recipient = Recipient.new(bot, message.chat)
+
+    case extract_command(message)
+    when '/lobby'
+      Thread.new { Commands::Lobby.new(recipient).call }
+    when '/arduino'
+      Thread.new { Commands::Arduino.new(recipient).call }
+    else
+      logger.warn("Received unsupported message: #{message.text}")
     end
   end
 
@@ -54,9 +40,14 @@ class SurviBot
     message.text.split('@').first
   end
 
-  def process_error(error)
-    log.error 'Error was raised:'
-    log.error error
+  def handle_error(error)
+    logger.error 'Error was raised:'
+    logger.error error
+
+    @retries ||= 0
+    sleep(@retries += 1)
     # TODO: Add error handling service
+
+    @retries < MAX_RETIRES
   end
 end
