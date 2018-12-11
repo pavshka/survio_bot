@@ -72,7 +72,7 @@ module Services
 
       if state_event?
         send_lobby unless lobby_sent?
-        ws.close if player_joined?
+        @ws.close if player_joined?
       elsif keep_alive_event?
         @keep_alive_counter += 1
         close_lobby if @keep_alive_counter >= KEEP_ALIVE_TIMEOUT
