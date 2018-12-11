@@ -1,5 +1,5 @@
-require_relative 'survibot'
+require_relative 'survio_bot'
 # DEBUG
 require 'pry'
 
-SurviBot.new.call
+SurvioBot.new.call

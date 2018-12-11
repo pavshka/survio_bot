@@ -1,9 +1,8 @@
 require_relative '../services/create_lobby'
 
 module Commands
-  class Arduino
+  class Squad
     def self.call(recipient)
-      recipient.send_gif('./resources/button.gif')
       Services::CreateLobby.call(recipient: recipient)
     end
   end
